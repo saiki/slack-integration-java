@@ -14,6 +14,8 @@ import lombok.ToString;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.Arrays;
+import java.util.Date;
 import java.util.TreeMap;
 import java.util.function.Consumer;
 
@@ -29,7 +31,6 @@ public class App {
 
         String token = args[0];
 
-
         startClient.getNow(443, "slack.com", "/api/rtm.start?token=" + token, resp -> {
             System.out.println("Got response " + resp.statusCode());
             resp.bodyHandler(body -> {
@@ -40,14 +41,20 @@ public class App {
                     URI url = new URI(json.getString("url"));
                     chatClient.websocket(443, url.getHost(), url.getPath(), socket -> {
                         socket.handler(buffer -> {
-                            io.vertx.core.json.JsonObject message = buffer.toJsonObject();
-                            String type = message.getString("type");
-                            if ( "pong".equals(type) ) {
+                            io.vertx.core.json.JsonObject jsonMessage = buffer.toJsonObject();
+                            String type = jsonMessage.getString("type");
+                            if ( type == null || "pong".equals(type) || "hello".equals(type) || "presence_change".equals(type) ) {
                                 return;
                             }
                             if ( "reconnect_url".equals(type) ) {
-                                reconnectUrl = message.getString("url");
+                                reconnectUrl = jsonMessage.getString("url");
+                                return;
                             }
+                            Message message = gson.fromJson(buffer.toString("UTF-8"), Message.class);
+                            Message response = new Message(1);
+                            response.setChannel(message.getChannel());
+                            response.setText(message.getText());
+                            socket.writeFinalTextFrame(gson.toJson(response));
                             System.out.println(buffer.toString("UTF-8"));
                         });
                         socket.exceptionHandler(throwable -> {
@@ -65,14 +72,22 @@ public class App {
                         });
 
                         RtmStartResponse result = gson.fromJson(body.toString("UTF-8"), RtmStartResponse.class);
-                        for (int i = 0; i < result.getChannels().length; i++) {
-                            System.out.println("id: " + result.getChannels()[i].getId());
-                            System.out.println("name: " + result.getChannels()[i].getName());
-                            Message message = new Message(i);
-                            message.channel = result.getChannels()[i].getId();
-                            message.text = "hello, " + result.getChannels()[i].getName() + " channel";
+                        System.out.println(result.getSelf());
+                        Arrays.stream(result.getChannels()).filter( channel -> {
+                            if ( channel.getMembers() == null || channel.getMembers().length == 0 ) {
+                                return false;
+                            }
+                            return Arrays.stream(channel.getMembers()).anyMatch( member -> {
+                                return result.getSelf().getId().equals(member);
+                            });
+                        }).forEach( channel -> {
+                            System.out.println("id: " + channel.getId());
+                            System.out.println("name: " + channel.getName());
+                            Message message = new Message(1);
+                            message.channel = channel.getId();
+                            message.text = "hello, " + channel.getName() + " channel";
                             socket.writeFinalTextFrame(gson.toJson(message));
-                        }
+                        });
                     }, throwable -> {
                         System.err.println(throwable.getMessage());
                         throwable.printStackTrace(System.err);
@@ -87,44 +102,75 @@ public class App {
 
     @ToString
     @EqualsAndHashCode
+    @Getter
+    @Setter
+    public static class Self {
+
+        private String id;
+
+        private String name;
+
+//        private Date created;
+
+        private String manualPresence;
+    }
+
+    @ToString
+    @EqualsAndHashCode
+    @Getter
+    @Setter
     public static class RtmStartResponse {
 
-        @Getter
-        @Setter
         private boolean ok;
-        @Getter
-        @Setter
+
         private String url;
-        @Getter
-        @Setter
+
+        private Self self;
+
         private Channel[] channels;
     }
 
     @ToString
     @EqualsAndHashCode
+    @Getter
+    @Setter
     public static class Channel {
-        @Getter
-        @Setter
+
         private String id;
-        @Getter
-        @Setter
+
         private String name;
+
+        private boolean isChannel;
+
+//        private Date created;
+
+        private String creator;
+
+        private boolean isArchived;
+
+        private boolean isGeneral;
+
+        private String[] members;
+
+        private boolean isMember;
+
     }
 
     @ToString
     @EqualsAndHashCode
+    @Getter
+    @Setter
     public static class ReConnectUrl {
-        @Getter
-        @Setter
+
         private String type;
-        @Getter
-        @Setter
+
         private String url;
     }
 
     @ToString
     @EqualsAndHashCode
     public static class Ping {
+
         @Getter
         @Setter
         private long id;
@@ -134,29 +180,32 @@ public class App {
 
     @ToString
     @EqualsAndHashCode
+    @Getter
+    @Setter
     public static class Message {
 
-        @Getter
-        @Setter
         private long id;
-        @Getter
-        @Setter
-        private String type;
-        @Getter
-        @Setter
+
+        private String type = "message";
+
         private String channel;
-        @Getter
-        @Setter
+
         private String text;
+
+        private long replyTo;
+
+        private String user;
+
+        public Message() {
+
+        }
 
         public Message(final int id) {
             this.id = id;
-            this.type = "message";
         }
 
         public Message(final int id, final String type) {
             this.id = id;
-            this.type = type;
         }
     }
 }
