@@ -1,4 +1,4 @@
-package jp.saiki;
+package slackrtm4j;
 
 import com.google.gson.Gson;
 import io.vertx.core.AbstractVerticle;
