@@ -4,7 +4,7 @@ slack real time messaging api client.
 # important
 this project is still work in progress.
 
-usage
+# usage
 
 ```java
 
