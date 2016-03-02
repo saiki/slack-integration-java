@@ -28,7 +28,7 @@
 				<artifactId>exec-maven-plugin</artifactId>
 				<version>1.2.1</version>
 				<configuration>
-					<mainClass>jp.saiki.App</mainClass>
+					<mainClass>slackrtm4j.App</mainClass>
 				</configuration>
 			</plugin>
 		</plugins>
